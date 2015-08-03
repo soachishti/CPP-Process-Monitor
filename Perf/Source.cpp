@@ -14,6 +14,7 @@
 #include <pdh.h>
 #include <pdhmsg.h>
 #include <algorithm>
+#include <mutex>
 
 #pragma comment(lib, "pdh.lib")
 
@@ -41,8 +42,10 @@ using namespace std;
 bool threadSignal = false;
 bool threadExit = false;
 queue<tuple<string, double, double, double>> myQueue;
-u_int refreshRate = 1500;
-
+map<wstring, thread*> threads;
+u_int refreshRate = 1500; // 1500 recommended
+u_int processorCount = 0;
+mutex myMutex;
 
 class CPdhQuery
 {
@@ -242,16 +245,6 @@ private:
 	std::tstring m_counterPath;
 };
 
-void DumpMap(map<tstring, double> const &m)
-{
-	map<tstring, double>::const_iterator itr = m.begin();
-	while (m.end() != itr)
-	{
-		tcout << itr->first << " " << itr->second << endl;
-		++itr;
-	}
-}
-
 double DumpMapTotal(map<tstring, double> const &m)
 {
 	map<tstring, double>::const_iterator itr = m.begin();
@@ -282,35 +275,45 @@ void getData(wstring processName) {
 	try {
 		query = L"\\Process(" + processName + L")\\% Processor Time";
 		CPdhQuery pdhProcessUsage(query);
-		pdhProcessUsage.CollectQueryData();
 
 		query = L"\\Process(" + processName + L")\\IO Read Bytes/sec";
 		CPdhQuery pdhProcessReadBytes(query);
-		pdhProcessReadBytes.CollectQueryData();
 
 		query = L"\\Process(" + processName + L")\\IO Write Bytes/sec";
 		CPdhQuery pdhProcessWriteBytes(query);
-		pdhProcessWriteBytes.CollectQueryData();
 		
 		bool status;
 		while (threadExit == false) {
 			status = threadSignal;
+			
+			//For minimizing cpu usage
+			//srand(static_cast<u_int>(time(NULL)));
+			//Sleep(rand() % 100 + 10);
+			
+			double processUsage = (DumpMapTotal(pdhProcessUsage.CollectQueryData()) / processorCount);
+			double read = DumpMapTotal(pdhProcessReadBytes.CollectQueryData());
+			double write = DumpMapTotal(pdhProcessWriteBytes.CollectQueryData());
+
 			tmp = make_tuple(
 				string(processName.begin(), processName.end()),
-				DumpMapTotal(pdhProcessUsage.CollectQueryData()),
-				DumpMapTotal(pdhProcessReadBytes.CollectQueryData()),
-				DumpMapTotal(pdhProcessWriteBytes.CollectQueryData())
+				processUsage,
+				read,
+				write
 				);
+
 			myQueue.push(tmp);
 
-			while (threadSignal == status) Sleep(10);
+			while (threadSignal == status) Sleep(100);
 		}
 		return;
 	}
 	catch (CPdhQuery::CException const &e)
 	{
-		e; return;
+		e;
+		return;
+		//tcout << e.What() << endl;
 	}
+	//tcout << "Exiting function " << processName << endl;
 }
 
 void listAllData()
@@ -319,8 +322,6 @@ void listAllData()
 	cout << "Loading...";
 
 	wstring processName;
-	map<wstring, thread*> threads;
-	int count = 0;
 	tuple<string, double, double, double> tmp;
 	vector<tuple<string, double, double, double>> tmpVec;
 	ostringstream ss;
@@ -332,13 +333,13 @@ void listAllData()
 	CPdhQuery pdhQueryDownload(tstring(_T("\\Network Interface(*)\\Bytes Received/sec")));
 	CPdhQuery pdhQueryUpload(tstring(_T("\\Network Interface(*)\\Bytes Received/sec")));
 
-	while (!_kbhit()) {
+	//while (!_kbhit()) {
+	while (true) {
 		threadSignal = (threadSignal) ? false : true;
 
 		m = pdhProcessDetail.CollectQueryData();
 		itr = m.begin();
 
-		count = 0;
 		while (m.end() != itr)
 		{
 			processName = itr->first;
@@ -350,15 +351,37 @@ void listAllData()
 				continue;
 			}
 
-			if (threads.find(processName) == threads.end())
+			myMutex.lock();
+			map<wstring, thread*>::iterator iter = threads.find(processName);
+			if (iter == threads.end())
 			{
 				thread *t = new thread(getData, processName);
 				threads[processName] = t;
+				//tcout << "#2 Thread started " << processName << endl;
+
 				//cout << "Thread started " << count << endl;
 			}
+			else {
+				if (iter->second->joinable() == false) {
+					threads.erase(iter);
+					//tcout << "#2 Removed from list " << processName << endl;
+				}
+				//else {
+					//tcout << "#2  Already running as thread " << processName << endl;
+				//}
+			}
 
-			count++;
+			myMutex.unlock();
+
 			++itr;
+		}
+
+
+		//Problem to fix is monitor which thread should be killed.
+
+		//Remove any joinable thread  (Thread which have been killed)
+		for (map<wstring, thread*>::iterator iterator = threads.begin(); iterator != threads.end(); iterator++) {
+			if (iterator->second->joinable() == false) threads.erase(iterator);
 		}
 
 		Sleep(refreshRate);
@@ -376,7 +399,7 @@ void listAllData()
 			}
 		);
 
-		ss << "Total CPU Usage: " << setprecision(3) << DumpMapTotal(pdhQueryCpuUsage.CollectQueryData()) << "%"
+		ss << "Total CPU Usage: " << setprecision(1) << DumpMapTotal(pdhQueryCpuUsage.CollectQueryData()) << "%"
 			<< endl
 			<< "Total Network Usage (DOWN): " << fixed << setprecision(2) << DumpMapTotal(pdhQueryDownload.CollectQueryData()) / (1024 * 8) << " Kbps" << endl
 			<< "Total Network Usage (UP): " << fixed << setprecision(2) << DumpMapTotal(pdhQueryUpload.CollectQueryData()) / (1024 * 8) << " Kbps" << endl
@@ -394,9 +417,9 @@ void listAllData()
 
 			ss << left
 				<< setw(20) << processName
-				<< fixed
 				<< right
-				<< setprecision(1)
+				<< fixed << showpoint
+				<< setprecision(1) 
 				<< setw(16) << get<1>(d) << " %"
 				<< setprecision(2)
 				<< setw(15) << get<2>(d) / (1024 * 8) << " Kbps"
@@ -410,18 +433,26 @@ void listAllData()
 		
 		gotoxy(0,0);
 	}
-
-	threadExit = true; // send signal to exit thread loop
-	threadSignal = (threadSignal) ? false : true; // Let thread proceed to exit 
-
-	//Cleaning stuff 
-	for (map<wstring, thread*>::iterator it = threads.begin(); it != threads.end(); ++it)
-	{
-		it->second->join();
-		delete it->second;
-	}
 }
 
 int main() {
+	SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+	
+	processorCount = thread::hardware_concurrency();
 	listAllData();
 }
+
+class ExitEvent
+{
+	~ExitEvent()
+	{
+		threadExit = true; // send signal to exit thread loop
+		threadSignal = (threadSignal) ? false : true; // Let thread proceed to exit 
+		//Cleaning stuff 
+		for (map<wstring, thread*>::iterator it = threads.begin(); it != threads.end(); ++it)
+		{
+			it->second->join();
+			delete it->second;
+		}
+	}
+};
