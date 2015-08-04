@@ -47,12 +47,15 @@ public:
 	};
 
 	//! Constructor
-	explicit CPdhQuery(std::tstring const &counterPath)
-		: m_pdhQuery(NULL)
-		, m_pdhStatus(ERROR_SUCCESS)
-		, m_pdhCounter(NULL)
-		, m_counterPath(counterPath)
+	CPdhQuery() {}
+	void init(std::tstring const &counterPath)
 	{
+		m_pdhQuery = NULL;
+		m_pdhStatus = ERROR_SUCCESS;
+		m_pdhCounter = NULL;
+		m_counterPath = counterPath;
+
+
 		if (m_pdhStatus = PdhOpenQuery(NULL, 0, &m_pdhQuery))
 		{
 			throw CException(GetErrorString(m_pdhStatus));
