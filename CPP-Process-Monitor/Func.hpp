@@ -1,5 +1,5 @@
-#ifndef PDHQUERY_H
-#define PDHQUERY_H
+#ifndef FUNC_H
+#define FUNC_H
 
 #include <windows.h>
 
@@ -14,4 +14,4 @@ void gotoxy(int column, int line)
 		);
 }
 
-#endif PDHQUERY_H
+#endif FUNC_H
