@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.31101.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Perf", "Perf\Perf.vcxproj", "{EB3FDF22-C576-4B3A-A2D5-233C25F3CABB}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CPP-Process-Monitor", "CPP-Process-Monitor\CPP-Process-Monitor.vcxproj", "{EB3FDF22-C576-4B3A-A2D5-233C25F3CABB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

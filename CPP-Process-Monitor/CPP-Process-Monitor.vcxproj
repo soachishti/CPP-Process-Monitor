@@ -14,6 +14,7 @@
     <ProjectGuid>{EB3FDF22-C576-4B3A-A2D5-233C25F3CABB}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>Perf</RootNamespace>
+    <ProjectName>CPP Process Monitor</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
