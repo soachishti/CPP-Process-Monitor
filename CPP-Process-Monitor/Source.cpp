@@ -18,7 +18,6 @@ int refreshRate = 1000;
 void main()
 {
 	SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
-
 	gotoxy(32, 10);
 	cout << "Loading...";
 
