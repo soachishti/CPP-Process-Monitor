@@ -8,12 +8,12 @@
 #include <iomanip>
 #include <algorithm>
 
-#include "PdhQuery.hpp"
+#include "CPdhQuery.h"
 #include "Func.hpp"
 
-using namespace std;
+#include "GetInfoPerfCount.hpp"
 
-int refreshRate = 1000;
+using namespace std;
 
 void main()
 {
@@ -21,7 +21,7 @@ void main()
 	gotoxy(32, 10);
 	cout << "Loading...";
 
-	getInformation g(1500); // Delay between query
+	PerfCount::getInformation g; // Delay between query 1500 (1.5sec)
 	while (true) {
 		g.printData();
 	}

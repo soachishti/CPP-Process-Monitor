@@ -82,12 +82,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="BackUpFunctions.cpp" />
     <ClCompile Include="Source.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CPdhQuery.h" />
     <ClInclude Include="Func.hpp" />
-    <ClInclude Include="PdhQuery.hpp" />
+    <ClInclude Include="GetInfoPerfCount.hpp" />
+    <ClInclude Include="psutilpp.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
