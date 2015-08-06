@@ -3,7 +3,6 @@
 
 // Source: https://askldjd.wordpress.com/2011/01/05/a-pdh-helper-class-cpdhquery/
 
-#include <windows.h>
 #include <pdh.h>
 #include <pdhmsg.h>
 #include <string>
@@ -35,6 +34,7 @@ using namespace std;
 class CPdhQuery
 {
 public:
+	bool firstTime = true;
 
 	// Inner exception class to report error.
 	class CException
@@ -50,6 +50,7 @@ public:
 	CPdhQuery() {}
 	void init(std::tstring const &counterPath)
 	{
+		firstTime = false;
 		m_pdhQuery = NULL;
 		m_pdhStatus = ERROR_SUCCESS;
 		m_pdhCounter = NULL;
@@ -159,7 +160,7 @@ public:
 
 				collectedData.insert(
 					std::make_pair(
-					std::tstring(pdhItems[i].szName),
+					std::tstring(pdhItems[i].szName + tmp),
 					pdhItems[i].FmtValue.doubleValue)
 					);
 			}
