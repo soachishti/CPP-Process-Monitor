@@ -11,6 +11,7 @@
 #include "CPdhQuery.h"
 #include "Func.hpp"
 
+
 using namespace std;
 
 namespace PerfCount {
@@ -18,7 +19,7 @@ namespace PerfCount {
 
 		typedef vector<tuple<string, double, double, double>> ProcessDetail;
 
-		map<tstring, tuple<getProcessCpuUsage*, CPdhQuery*, CPdhQuery*>> queries;
+		map<tstring, tuple<getProcessCpuUsage*, CPdhQuery*, CPdhQuery*, CPdhQuery*>> queries;
 		int noOfProcesses = 0;
 		CPdhQuery processName, totalCpuUsage, download, upload;
 		int refreshRate = 0;
@@ -36,7 +37,7 @@ namespace PerfCount {
 
 		double getCPUUsage() {
 			
-			int tmpCpuUsage = DumpMapTotal(totalCpuUsage.CollectQueryData());
+			double tmpCpuUsage = DumpMapTotal(totalCpuUsage.CollectQueryData());
 			if (tmpCpuUsage == 100 && SumCPUUsage < 100) {
 				return SumCPUUsage;
 			}
@@ -62,12 +63,13 @@ namespace PerfCount {
 				}
 
 				if (queries.find(itr->first) == queries.end()) {
-					//CPdhQuery *q1 = new CPdhQuery;
-					//q1->init(L"\\Process(" + itr->first + L")\\% Processor Time");
-					//q1->CollectQueryData();
-
+					
 					getProcessCpuUsage *q1 = new getProcessCpuUsage((DWORD)itr->second);
 					q1->get();
+
+					CPdhQuery *q4 = new CPdhQuery;
+					q4->init(L"\\Process(" + itr->first + L")\\% Processor Time");
+					q4->CollectQueryData();
 
 					CPdhQuery *q2 = new CPdhQuery;
 					q2->init(L"\\Process(" + itr->first + L")\\IO Read Bytes/sec");
@@ -77,7 +79,7 @@ namespace PerfCount {
 					q3->init(L"\\Process(" + itr->first + L")\\IO Write Bytes/sec");
 					q3->CollectQueryData();
 
-					queries[itr->first] = make_tuple(q1, q2, q3);
+					queries[itr->first] = make_tuple(q1, q2, q3,q4);
 				}
 				noOfProcesses++;
 			}
@@ -89,13 +91,17 @@ namespace PerfCount {
 
 			SumCPUUsage = 0;
 			int timeDelay = (refreshRate / noOfProcesses);
-			for (map<tstring, tuple<getProcessCpuUsage*, CPdhQuery*, CPdhQuery*>>::iterator it = queries.begin();
+			for (map<tstring, tuple<getProcessCpuUsage*, CPdhQuery*, CPdhQuery*, CPdhQuery*>>::iterator it = queries.begin();
 				it != queries.end(); ++it) {
 				try {
 					string processName = string(it->first.begin(), it->first.end());
 					processName.resize(20);
 
-					double cpuUsage = get<0>(it->second)->get();
+					double tmpCpuUsage = get<0>(it->second)->get();
+					double cpuUsage = DumpMapTotal(get<3>(it->second)->CollectQueryData());
+					if (cpuUsage != 100)
+						cpuUsage = tmpCpuUsage;
+
 					double read = DumpMapTotal(get<1>(it->second)->CollectQueryData());
 					double write = DumpMapTotal(get<2>(it->second)->CollectQueryData());
 					finalData.push_back(make_tuple(processName, cpuUsage, read, write));
@@ -137,8 +143,8 @@ namespace PerfCount {
 					<< setw(20) << left << "Process Name"
 					<< right
 					<< setw(19) << "CPU Usage"
-					<< setw(19) << "Sent"
-					<< setw(19) << "Received" << endl;
+					<< setw(19) << "Disk Read"
+					<< setw(19) << "Disk Write" << endl;
 
 				ProcessDetail finalData = readData();
 				for (auto d : finalData) {
@@ -158,5 +164,9 @@ namespace PerfCount {
 
 	};
 };
+
+void printAllData() {
+		
+}
 
 #endif GETINFO_PERFCOUNT
