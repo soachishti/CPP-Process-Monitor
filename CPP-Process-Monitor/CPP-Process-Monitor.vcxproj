@@ -83,12 +83,16 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Source.cpp" />
+    <ClCompile Include="Source1.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CPdhQuery.h" />
     <ClInclude Include="Func.hpp" />
     <ClInclude Include="GetInfoPerfCount.hpp" />
     <ClInclude Include="psutilpp.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="psutil.bak" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
