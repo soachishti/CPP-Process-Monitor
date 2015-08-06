@@ -15,23 +15,14 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
-#include <iostream>
-using namespace std;
 
 #include <windows.h>
 #include <tlhelp32.h>
 #include <psapi.h>
 
 #include <stdio.h>
-BOOL SetPrivilege(
-	HANDLE hToken,          // token handle
-	LPCTSTR Privilege,      // Privilege to enable/disable
-	BOOL bEnablePrivilege   // TRUE to enable.  FALSE to disable
-	);
-#define RTN_OK 0
-#define RTN_USAGE 1
-#define RTN_ERROR 13
 
+#include "CpdhQuery.h"
 
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "ws2_32.lib")
@@ -160,33 +151,21 @@ namespace psutilpp {
 
 	};
 
-	vector<unsigned> pids() {
-		vector<unsigned> pid;
-		HANDLE hProcessSnap;
-		PROCESSENTRY32 pe32;
-
-		hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-		if (hProcessSnap == INVALID_HANDLE_VALUE)
-		{
-			Functions::printError(TEXT("CreateToolhelp32Snapshot (of processes)"));
+	vector<int> pids() {
+		vector<int> pid;
+		CPdhQuery q;
+		q.init(L"\\Process(*)\\ID Process");
+		auto data = q.CollectQueryData();
+		for (auto d : data) {
+			pid.push_back(int(d.second));
 		}
-
-		pe32.dwSize = sizeof(PROCESSENTRY32);
-
-		if (!Process32First(hProcessSnap, &pe32))
-		{
-			Functions::printError(TEXT("Process32First")); // show cause of failure
-			CloseHandle(hProcessSnap);          // clean the snapshot object
-		}
-
-		do
-		{
-			pid.push_back(pe32.th32ProcessID);
-
-		} while (Process32Next(hProcessSnap, &pe32));
-
-		CloseHandle(hProcessSnap);
 		return pid;
+	}
+
+	map<wstring,double> name_and_pid() {
+		CPdhQuery q;
+		q.init(L"\\Process(*)\\ID Process");
+		return q.CollectQueryData();
 	}
 
 	struct CPU {
@@ -544,183 +523,66 @@ namespace psutilpp {
 	};
 
 	struct Process {
-		HANDLE hProc;
-		PROCESSENTRY32 pe32;
+		tstring processName;
 		int pid;
-
 		Process(int id) {
 			pid = id;
-			HANDLE hProcessSnap;
-			hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-			if (hProcessSnap == INVALID_HANDLE_VALUE)
-				Functions::printError(TEXT("CreateToolhelp32Snapshot (of processes)"));
-			pe32.dwSize = sizeof(PROCESSENTRY32);
-			if (!Process32First(hProcessSnap, &pe32))
-			{
-				Functions::printError(TEXT("Process32First")); // show cause of failure
-				CloseHandle(hProcessSnap);          // clean the snapshot object
-			}
-
-			do
-			{
-				if (pid == pe32.th32ProcessID) {
-					CloseHandle(hProcessSnap);
+			auto data = name_and_pid();
+			for (auto d : data) {
+				if (d.second == id) {
+					processName = d.first;
 					break;
 				}
-			} while (Process32Next(hProcessSnap, &pe32));
-
-			CloseHandle(hProcessSnap);
-
-			/*
-			HANDLE hToken;
-			LUID luid;
-			TOKEN_PRIVILEGES tkp;
-
-			OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
-			LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &luid);
-			tkp.PrivilegeCount = 1;
-			tkp.Privileges[0].Luid = luid;
-			tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-
-			AdjustTokenPrivileges(hToken, false, &tkp, sizeof(tkp), NULL, NULL);
-			CloseHandle(hToken);
-			*/
-
-			if (id != 0) {
-				hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, id);
-				//if (hProc == NULL)
-				//	Functions::printError(TEXT("OpenProcess"));
 			}
 		}
 
 		string name() {
-			wstring processName;
-			processName = pe32.szExeFile;
-			string ps = string(processName.begin(), processName.end());
-			return ps;
-		}
-
-		string path() {
-			LPWSTR path = new WCHAR[MAX_PATH];
-			DWORD charsCarried = MAX_PATH;
-			if (QueryFullProcessImageName(hProc, 0, path, &charsCarried))
-			{
-				wstring npath = path;
-				return string(npath.begin(), npath.end());
-			}
-			return string();
-		}
-
-		unsigned priority() {
-			MEMORY_PRIORITY_INFORMATION MemPrio;
-			if (GetProcessInformation(hProc,
-				ProcessMemoryPriority,
-				&MemPrio,
-				sizeof(MemPrio))
-				)
-			{
-				return MemPrio.MemoryPriority;
-			}
+			return string(processName.begin(), processName.end());
 		}
 
 		map<string, double> io_counters() {
+			CPdhQuery q;
 			map<string, double> info;
-			IO_COUNTERS counter;
-			if (GetProcessIoCounters(hProc, &counter)) {
-				info["ReadOps"] = (double)counter.ReadOperationCount;
-				info["WriteOps"] = (double)counter.WriteOperationCount;
-				info["ReadTransfer"] = (double)counter.ReadTransferCount;
-				info["WriteTransfer"] = (double)counter.WriteTransferCount;
-				info["OtherTransfer"] = (double)counter.OtherTransferCount;
-				info["OtherOps"] = (double)counter.OtherOperationCount;
-			}
+
+			q.init(L"\\Process(" + processName + L")\\IO Read Bytes/sec");
+			info["ReadTransfer"] = DumpMapTotal(q.CollectQueryData());
+			
+			q.init(L"\\Process(" + processName + L")\\IO Write Bytes/sec");
+			info["WriteTransfer"] = DumpMapTotal(q.CollectQueryData());
+
+			q.init(L"\\Process(" + processName + L")\\IO Read Operations/sec");
+			info["ReadOps"] = DumpMapTotal(q.CollectQueryData());
+
+			q.init(L"\\Process(" + processName + L")\\IO Write Operations/sec");
+			info["WriteOps"] = DumpMapTotal(q.CollectQueryData());
+
 			return info;
 		}
 
-		double create_times() {
-			FILETIME creation, exit, kernel, user;
-			map<string, __int64> data;
-			if (GetProcessTimes(hProc, &creation, &exit, &kernel, &user))
-			{
-				return Functions::filetime2int(creation);
-			}
-			return double();
-		}
-
-		map<string, double> cpu_times() {
-			FILETIME creation, exit, kernel, user;
+		map<string, double> memory_info(){
+			CPdhQuery q;
 			map<string, double> data;
-			if (GetProcessTimes(hProc, &creation, &exit, &kernel, &user))
-			{
-				data["kernel"] = Functions::filetime2int(kernel);
-				data["user"] = Functions::filetime2int(user);
-				return data;
-			}
+
+			q.init(L"\\Process(" + processName + L")\\Virtual Bytes");
+			data["vms"] = DumpMapTotal(q.CollectQueryData());
+
+			q.init(L"\\Process(" + processName + L")\\Working Set");
+			data["rss"] = DumpMapTotal(q.CollectQueryData());
 			return data;
 		}
 
-		map<string, unsigned> memory_info(){
-			map<string, unsigned> data;
-			PROCESS_MEMORY_COUNTERS memCounter;
-			if (GetProcessMemoryInfo(GetCurrentProcess(),
-				&memCounter,
-				sizeof(memCounter))
-				)
-			{
-				data["vms"] = memCounter.PagefileUsage;
-				data["rss"] = memCounter.WorkingSetSize;
-				return data;
-			}
-			return map<string, unsigned>();
+		double num_threads() {
+			CPdhQuery q;
+			q.init(L"\\Process(" + processName + L")\\Thread Count");
+			return DumpMapTotal(q.CollectQueryData());
 		}
 
-		unsigned num_threads() {
-			return pe32.cntThreads;
-		}
-
-		unsigned parent_id() {
-			return pe32.th32ParentProcessID;
-		}
-
-
-		unsigned is64bitProcess() {
-			BOOL info;
-			if (IsWow64Process(hProc, &info))
-			{
-				return info;
-			}
-			return 0;
-		}
-
-		map<string, double> lastCpuTime, lastProcessTime;
 		double cpu_times_percent(int delay = 1000) {
-			//http://www.philosophicalgeek.com/2009/01/03/determine-cpu-usage-of-current-process-c-and-c/
-			map<string, double> CpuTime, ProcessTime;
-			double usr, ker, sys, proc, percent;
-
-			if (lastCpuTime.size() == 0) {
-				CPU c;
-				lastCpuTime = c.cpu_times();
-				lastProcessTime = cpu_times();
-			}
-
+			static CPdhQuery q;
+			if(q.firstTime) 
+				q.init(L"\\Process(" + processName + L")\\% Processor Time");
 			Sleep(delay);
-			CpuTime = cpu_times();
-
-			usr = CpuTime["user"] - lastCpuTime["user"];
-			ker = CpuTime["kernel"] - lastCpuTime["kernel"];
-			sys = ker + usr;
-
-			usr = ProcessTime["user"] - lastProcessTime["user"];
-			ker = ProcessTime["kernel"] - lastProcessTime["kernel"];
-			proc = ker + usr;
-
-			percent = (proc / sys) * 100;
-
-			lastCpuTime = CpuTime;
-			lastProcessTime = ProcessTime;
-
-			return percent;
+			return DumpMapTotal(q.CollectQueryData());
 		}
 
 		NetworkInfo connections(int pid) {
